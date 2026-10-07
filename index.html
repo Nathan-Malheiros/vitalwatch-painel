@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VitalWatch - painel BLE</title>
+<style>
+:root{
+  --bg:#0A111C; --bg-deep:#070D16; --surface:#111C2C; --surface-2:#16243A;
+  --border:#1D3049; --border-hi:#2A4666; --text:#DCE9F5; --dim:#6E8CA8; --muted:#415E7C;
+  --accent:#3ED9C0; --hr:#F7566B; --spo2:#4FACFF; --motion:#F5A623; --panic:#FF4D5E;
+  --ok:#2EC897; --warn:#F5A623; --danger:#F7566B; --off:#3A4A5A;
+  --shadow:0 1px 3px rgba(0,0,0,.4), 0 0 0 1px rgba(42,70,102,.35);
+}
+[data-theme="light"]{
+  --bg:#EAEFF5; --bg-deep:#DEE5EE; --surface:#FFFFFF; --surface-2:#F4F7FB;
+  --border:#CEDAE7; --border-hi:#B0C1D4; --text:#14212D; --dim:#52677A; --muted:#7A8FA3;
+  --accent:#0E9E88; --hr:#D62035; --spo2:#1466B6; --motion:#B0700A; --panic:#C4142B;
+  --ok:#0D9167; --warn:#B0700A; --danger:#D62035; --off:#8EA0B1;
+  --shadow:0 1px 3px rgba(20,33,45,.08), 0 0 0 1px rgba(176,193,212,.6);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text); min-height:100vh;
+  font-family:'Inter','SF Pro Display',system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased;
+}
+header{
+  background:var(--bg-deep); border-bottom:1px solid var(--border);
+  padding:14px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  position:sticky; top:0; z-index:10;
+}
+.brand{display:flex;align-items:center;gap:11px;margin-right:auto}
+.mark{
+  width:32px;height:32px;border-radius:9px;display:grid;place-items:center;
+  background:linear-gradient(145deg,var(--accent),var(--spo2));color:#04121A;
+  font-weight:700;font-size:15px;flex:none;
+}
+.brand h1{font-size:16px;font-weight:600;letter-spacing:-.01em;line-height:1.2}
+.brand span{display:block;font-size:11px;color:var(--dim);font-weight:400}
+.pill{
+  display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;
+  background:var(--surface);border:1px solid var(--border);font-size:12px;font-weight:500;
+}
+.pill.meta{color:var(--dim)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--off);flex:none}
+.dot.on{background:var(--ok);box-shadow:0 0 8px rgba(46,200,151,.7)}
+.dot.err{background:var(--danger);box-shadow:0 0 8px rgba(247,86,107,.7)}
+.dot.warn{background:var(--warn);box-shadow:0 0 8px rgba(245,166,35,.7)}
+.dot.live{animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+button.ghost{
+  background:var(--surface);border:1px solid var(--border);color:var(--dim);
+  width:34px;height:34px;border-radius:9px;cursor:pointer;font-size:15px;line-height:1;
+}
+button.ghost:hover{border-color:var(--border-hi);color:var(--text)}
+main{padding:20px;max-width:1400px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.banner{
+  display:none;padding:12px 16px;border-radius:11px;font-size:13px;
+  background:rgba(247,86,107,.1);border:1px solid rgba(247,86,107,.35);color:var(--danger);
+}
+.banner.show{display:block}
+.grid{display:grid;gap:16px}
+.g-vitals{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.g-charts{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:16px 18px;box-shadow:var(--shadow);
+}
+.card h2{
+  font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--dim);display:flex;align-items:center;gap:8px;margin-bottom:12px;
+}
+.card h2 .tag{margin-left:auto;font-size:10px;letter-spacing:.04em;color:var(--muted);text-transform:none}
+.value{display:flex;align-items:baseline;gap:8px}
+.value b{font-size:44px;font-weight:600;letter-spacing:-.03em;line-height:1}
+.value i{font-style:normal;font-size:14px;color:var(--dim);font-weight:500}
+.value.hr b{color:var(--hr)} .value.spo2 b{color:var(--spo2)} .value.motion b{color:var(--motion)}
+.value.idle b{color:var(--muted)}
+.sub{margin-top:10px;font-size:12px;color:var(--dim);min-height:17px}
+.axes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.axis{background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:8px 10px}
+.axis span{display:block;font-size:10px;color:var(--muted);letter-spacing:.07em;font-weight:600}
+.axis b{font-size:17px;font-weight:600;color:var(--text)}
+canvas{width:100%;height:160px;display:block}
+.status-list{display:flex;flex-direction:column;gap:9px}
+.status-row{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;
+  background:var(--surface-2);border:1px solid var(--border);font-size:13px;
+}
+.status-row b{font-weight:500}
+.status-row em{margin-left:auto;font-style:normal;font-size:11px;color:var(--dim);
+  text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+.kv{display:grid;grid-template-columns:1fr auto;gap:7px 12px;font-size:12.5px}
+.kv dt{color:var(--dim)} .kv dd{color:var(--text);font-weight:500}
+footer{
+  padding:16px 20px 28px;text-align:center;font-size:11.5px;color:var(--muted);line-height:1.7;
+}
+/* --- alertas --- */
+.alerts{display:flex;flex-direction:column;gap:8px}
+.alert{
+  display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;
+  border:1px solid var(--border);background:var(--surface-2);font-size:13px;
+}
+.alert .ico{font-size:15px;line-height:1.3;flex:none}
+.alert b{display:block;font-weight:600;margin-bottom:2px}
+.alert span{color:var(--dim);font-size:12px;line-height:1.5}
+.alert.crit{border-color:rgba(247,86,107,.5);background:rgba(247,86,107,.1)}
+.alert.crit b{color:var(--danger)}
+.alert.warn{border-color:rgba(245,166,35,.45);background:rgba(245,166,35,.08)}
+.alert.warn b{color:var(--warn)}
+.alert .age{margin-left:auto;font-size:11px;color:var(--muted);white-space:nowrap}
+.alerts-empty{font-size:13px;color:var(--dim);padding:8px 2px}
+.posture-big{
+  display:flex;align-items:baseline;gap:10px;margin:2px 0 10px;
+}
+.posture-big b{font-size:28px;font-weight:600;letter-spacing:-.02em}
+.posture-big i{font-style:normal;font-size:12px;color:var(--dim)}
+/* --- paciente e panico --- */
+.patient-name{font-size:24px;font-weight:600;letter-spacing:-.01em;line-height:1.2;overflow-wrap:anywhere}
+.patient-facts{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:6px;font-size:13px;color:var(--dim)}
+.patient-facts span:empty{display:none}
+.panic{transition:background .2s,border-color .2s}
+.panic.on{background:rgba(255,77,94,.14);border-color:var(--panic)}
+.panic.on .value b{color:var(--panic)}
+.panic.on h2{color:var(--panic)}
+.events{list-style:none;display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto}
+.events li{display:grid;grid-template-columns:auto 1fr;gap:10px;font-size:12.5px;
+  padding:7px 10px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border)}
+.events time{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.events b{font-weight:600;margin-right:6px}
+.events .crit b{color:var(--danger)}
+/* --- formulario de rede --- */
+.netbox{display:flex;flex-direction:column;gap:10px;font-size:13px}
+.netbox label{display:flex;flex-direction:column;gap:5px;color:var(--dim)}
+.netbox input,.netbox select{
+  background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+  border-radius:9px;padding:8px 10px;font-size:13px;font-family:inherit;width:100%;
+}
+.netbox input:focus,.netbox select:focus{outline:none;border-color:var(--accent)}
+.netbox .row{display:flex;gap:8px;align-items:center}
+.netbox .row input{flex:1}
+.netbox .check{flex-direction:row;align-items:center;gap:8px;color:var(--text)}
+.netbox .check input{width:auto}
+.netbox .hint{font-size:11.5px;color:var(--muted);line-height:1.5}
+button.primary{
+  background:var(--accent);color:#04121A;border:none;border-radius:9px;
+  padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;
+}
+button.primary:disabled{opacity:.5;cursor:default}
+button.ghost.wide{width:auto;padding:0 12px;height:34px;font-size:12px}
+.netmsg{font-size:12px;min-height:17px;color:var(--dim);line-height:1.5}
+.netmsg.err{color:var(--danger)}
+.netmsg.ok{color:var(--ok)}
+@media(max-width:640px){
+  header{padding:12px 14px} main{padding:14px} .value b{font-size:36px}
+  .brand h1{font-size:15px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="mark">VW</div>
+    <div>
+      <h1 id="devName">VitalWatch Band</h1>
+      <span id="fw">conectando a pulseira</span>
+    </div>
+  </div>
+  <button class="ghost wide" id="bleBtn" onclick="bleToggle()" style="width:auto;padding:0 14px">Conectar</button>
+  <div class="pill"><span class="dot" id="linkDot"></span><span id="linkText">Conectando...</span></div>
+  <div class="pill meta" id="ipPill">--</div>
+  <div class="pill meta" id="agePill">--</div>
+  <button class="ghost" id="soundBtn" title="Som dos alertas">🔈</button>
+  <button class="ghost" id="themeBtn" title="Alternar tema">◐</button>
+</header>
+
+<main>
+  <div class="banner" id="banner"></div>
+
+  <section class="grid g-vitals">
+    <div class="card">
+      <h2>Paciente <span class="tag" id="ptTag"></span></h2>
+      <div class="patient-name" id="ptName">--</div>
+      <div class="patient-facts">
+        <span id="ptAge"></span><span id="ptRoom"></span><span id="ptContact"></span>
+      </div>
+    </div>
+
+    <div class="card panic" id="panicCard">
+      <h2>Pedido de ajuda <span class="tag" id="pnTag"></span></h2>
+      <div class="value idle" id="pnBox"><b id="pnState">--</b><i id="pnSince"></i></div>
+      <div class="sub" id="pnSub">Tres toques no botao da pulseira pedem ajuda.</div>
+    </div>
+
+    <div class="card">
+      <h2>Movimento <span class="tag" id="mvTag"></span></h2>
+      <div class="value idle" id="mvBox"><b id="mag">--</b><i>g</i></div>
+      <div class="axes">
+        <div class="axis"><span>X</span><b id="ax">--</b></div>
+        <div class="axis"><span>Y</span><b id="ay">--</b></div>
+        <div class="axis"><span>Z</span><b id="az">--</b></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid g-charts">
+    <div class="card">
+      <h2>Intensidade do movimento <span class="tag">ultimos 2 min</span></h2>
+      <canvas id="cEn"></canvas>
+    </div>
+    <div class="card">
+      <h2>Aceleracao X / Y / Z <span class="tag">ultimos 2 min</span></h2>
+      <canvas id="cAc"></canvas>
+    </div>
+  </section>
+
+  <section class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+    <div class="card">
+      <h2>Alertas <span class="tag" id="alTag">--</span></h2>
+      <div class="alerts" id="alList"></div>
+      <div class="alerts-empty" id="alEmpty">Nenhum alerta ativo.</div>
+      <div class="row" style="margin-top:12px;display:flex;gap:8px">
+        <button class="ghost wide" id="ackBtn">Reconhecer alertas</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Postura <span class="tag" id="poTag">--</span></h2>
+      <div class="posture-big">
+        <b id="poLabel">--</b><i id="poAngle"></i>
+      </div>
+      <div class="status-list">
+        <div class="status-row"><span class="dot" id="dFall"></span><b>Queda</b><em id="sFall">--</em></div>
+        <div class="status-row"><span class="dot" id="dMove"></span><b>Movimento</b><em id="sMove">--</em></div>
+        <div class="status-row"><span class="dot" id="dTremor"></span><b>Tremor</b><em id="sTremor">--</em></div>
+        <div class="status-row"><span class="dot" id="dOdd"></span><b>Padrao</b><em id="sOdd">--</em></div>
+      </div>
+      <div class="hint" style="margin-top:10px">
+        A inclinacao vem de um unico acelerometro: ela separa tronco ereto de
+        tronco deitado, mas <b>nao</b> separa sentado de em pe com confianca.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Historico <span class="tag" id="evTag">--</span></h2>
+      <ol class="events" id="evList"></ol>
+      <div class="alerts-empty" id="evEmpty">Nenhum evento registrado ainda.</div>
+      <div class="hint" style="margin-top:10px;font-size:11.5px;color:var(--muted)">
+        Inclui o que aconteceu com o painel fechado ou durante a configuracao.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Teste de alertas <span class="tag">simulacao</span></h2>
+      <div class="netbox">
+        <div class="hint">
+          Dispara os alertas sem apertar o botao nem derrubar a pulseira. O
+          alerta simulado fica ate ser reconhecido, como um de verdade.
+        </div>
+        <div class="netmsg" id="tMsg"></div>
+        <div class="row">
+          <button class="primary" id="panicBtn" style="display:none">Simular pedido de ajuda</button>
+          <button class="ghost wide" id="fallBtn" style="display:none">Simular queda</button>
+          <button class="ghost wide" id="beepBtn" style="display:none">Testar buzzer</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Status dos sensores</h2>
+      <div class="status-list">
+        <div class="status-row"><span class="dot" id="dMpu"></span><b>MPU6050</b><em id="sMpu">--</em></div>
+        <div class="status-row"><span class="dot" id="dEsp"></span><b>ESP32-C3</b><em id="sEsp">--</em></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Diagnostico</h2>
+      <dl class="kv">
+        <dt>Rede</dt><dd id="kNet">--</dd>
+        <dt>Uptime</dt><dd id="kUp">--</dd>
+        <dt>Heap livre</dt><dd id="kHeap">--</dd>
+        <dt>Ciclos de aquisicao</dt><dd id="kSamples">--</dd>
+        <dt>Modo</dt><dd id="kMode">--</dd>
+        <dt>Pedidos de ajuda</dt><dd id="kPanics">--</dd>
+        <dt>Temperatura (MPU)</dt><dd id="kTemp">--</dd>
+        <dt>Giroscopio X/Y/Z</dt><dd id="kGyro">--</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2>Rede e configuracao <span class="tag" id="netTag">--</span></h2>
+      <dl class="kv">
+        <dt>Dados saem por</dt><dd id="nLink">--</dd>
+        <dt>Rede do hospital</dt><dd id="nSsid">--</dd>
+        <dt>Endereco</dt><dd id="nAddr">--</dd>
+      </dl>
+      <div class="hint" style="margin-top:12px;font-size:11.5px;color:var(--muted);line-height:1.6">
+        Para trocar o paciente ou a rede: segure o botao da pulseira por 10 s
+        (o LED azul acende e depois pisca). Conecte o celular na rede
+        <b id="nAp">VitalWatch</b> e a pagina de configuracao abre sozinha.
+        Sem ninguem conectar em 1 minuto, ela fecha e nada muda.
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  A pulseira sinaliza eventos para observacao da equipe &mdash; <b>nao faz diagnostico</b>.<br>
+  Limiares de queda e tremor calibrados em bancada.
+</footer>
+
+<script>
+"use strict";
+
+/* ---------- janela de dados limitada (nao cresce indefinidamente) ---------- */
+var MAX_POINTS = 240;               /* 240 amostras x 0,5 s = 2 min */
+function Series(n){ this.n=n; this.d=[]; }
+Series.prototype.push=function(v){ this.d.push(v); if(this.d.length>this.n) this.d.shift(); };
+
+var sEn = new Series(MAX_POINTS);
+var sAx = new Series(MAX_POINTS), sAy = new Series(MAX_POINTS), sAz = new Series(MAX_POINTS);
+var lastPlot = 0;
+
+/* ---------- tema ---------- */
+var themeBtn = document.getElementById('themeBtn');
+var saved = null;
+try { saved = localStorage.getItem('vw-theme'); } catch(e){}
+if (saved) document.documentElement.setAttribute('data-theme', saved);
+themeBtn.onclick = function(){
+  var cur = document.documentElement.getAttribute('data-theme');
+  var next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('vw-theme', next); } catch(e){}
+  drawAll();
+};
+
+function css(name){
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/* ---------- desenho dos graficos ---------- */
+function setupCanvas(cv){
+  var dpr = window.devicePixelRatio || 1;
+  var r = cv.getBoundingClientRect();
+  cv.width = Math.max(1, Math.floor(r.width * dpr));
+  cv.height = Math.max(1, Math.floor(r.height * dpr));
+  var ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx: ctx, w: r.width, h: r.height };
+}
+
+/*
+ * series: [{data:[...], color:'#rgb', label:'X'}]
+ * Valores null representam "sem leitura" e quebram a linha - de proposito:
+ * uma linha continua sobre um buraco de dados seria mentira visual.
+ */
+function drawChart(id, series, min, max, unit){
+  var cv = document.getElementById(id);
+  var s = setupCanvas(cv), ctx = s.ctx, w = s.w, h = s.h;
+  var padL = 34, padR = 8, padT = 8, padB = 18;
+  var gw = w - padL - padR, gh = h - padT - padB;
+
+  ctx.clearRect(0,0,w,h);
+
+  var grid = css('--border'), dim = css('--dim');
+  ctx.strokeStyle = grid; ctx.lineWidth = 1;
+  ctx.fillStyle = dim; ctx.font = '10px system-ui,sans-serif'; ctx.textAlign = 'right';
+
+  for (var i = 0; i <= 4; i++){
+    var y = padT + gh * i / 4;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + gw, y); ctx.stroke();
+    var val = max - (max - min) * i / 4;
+    ctx.fillText(Math.abs(val) >= 10 ? val.toFixed(0) : val.toFixed(1), padL - 6, y + 3);
+  }
+
+  function px(idx, total){ return padL + (total <= 1 ? gw : gw * idx / (total - 1)); }
+  function py(v){
+    var t = (v - min) / (max - min);
+    if (t < 0) t = 0; if (t > 1) t = 1;
+    return padT + gh * (1 - t);
+  }
+
+  var hasAny = false;
+  for (var k = 0; k < series.length; k++){
+    var d = series[k].data, n = d.length;
+    if (!n) continue;
+    ctx.strokeStyle = series[k].color; ctx.lineWidth = 2;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath();
+    var pen = false, lastX = null, lastY = null;
+    for (var j = 0; j < n; j++){
+      var v = d[j];
+      if (v === null || v === undefined || isNaN(v)){ pen = false; continue; }
+      hasAny = true;
+      var X = px(j, n), Y = py(v);
+      if (!pen){ ctx.moveTo(X, Y); pen = true; } else { ctx.lineTo(X, Y); }
+      lastX = X; lastY = Y;
+    }
+    ctx.stroke();
+    if (lastX !== null){
+      ctx.fillStyle = series[k].color;
+      ctx.beginPath(); ctx.arc(lastX, lastY, 3, 0, 6.2832); ctx.fill();
+    }
+  }
+
+  if (!hasAny){
+    ctx.fillStyle = css('--muted'); ctx.textAlign = 'center'; ctx.font = '11px system-ui,sans-serif';
+    ctx.fillText('sem dados', padL + gw/2, padT + gh/2);
+  }
+
+  if (series.length > 1){
+    ctx.textAlign = 'left'; ctx.font = '10px system-ui,sans-serif';
+    var lx = padL + 4;
+    for (var m = 0; m < series.length; m++){
+      ctx.fillStyle = series[m].color;
+      ctx.fillText(series[m].label, lx, padT + 10);
+      lx += ctx.measureText(series[m].label).width + 12;
+    }
+  }
+
+  ctx.fillStyle = css('--muted'); ctx.textAlign = 'right'; ctx.font = '10px system-ui,sans-serif';
+  ctx.fillText(unit, w - padR, h - 5);
+}
+
+function drawAll(){
+  drawChart('cEn', [{data:sEn.d, color:css('--motion'), label:'energia'}], 0, 0.6, 'g');
+  drawChart('cAc', [
+    {data:sAx.d, color:css('--hr'),     label:'X'},
+    {data:sAy.d, color:css('--ok'),     label:'Y'},
+    {data:sAz.d, color:css('--spo2'),   label:'Z'}
+  ], -2, 2, 'g');
+}
+window.addEventListener('resize', drawAll);
+
+/* ---------- estado da conexao ---------- */
+var lastMsg = 0, connected = false;
+
+function setLink(state, text){
+  var dot = document.getElementById('linkDot');
+  dot.className = 'dot' + (state === 'on' ? ' on live' : state === 'err' ? ' err' : '');
+  document.getElementById('linkText').textContent = text;
+}
+
+function setBanner(msg){
+  var b = document.getElementById('banner');
+  if (msg){ b.textContent = msg; b.className = 'banner show'; }
+  else { b.className = 'banner'; }
+}
+
+function stateDot(el, state){
+  el.className = 'dot' + (state === 'ok' ? ' on' : state === 'error' ? ' err' : '');
+}
+
+/* ---------- render ---------- */
+function render(d){
+  lastMsg = Date.now();
+
+  document.getElementById('devName').textContent = d.device_name || 'VitalWatch Band';
+  document.getElementById('fw').textContent =
+    'firmware v' + d.firmware + ' · ' + (d.network.link === 'ble' ? 'Bluetooth' : 'Wi-Fi');
+
+  renderPatient(d);
+  renderPanic(d);
+  renderEvents(d);
+
+  /* --- movimento --- */
+  var mpuOk = d.sensors.mpu6050 === 'ok';
+  var mvBox = document.getElementById('mvBox');
+  if (mpuOk){
+    document.getElementById('mag').textContent = d.motion.magnitude.toFixed(2);
+    mvBox.className = 'value motion';
+    document.getElementById('ax').textContent = d.motion.ax.toFixed(2);
+    document.getElementById('ay').textContent = d.motion.ay.toFixed(2);
+    document.getElementById('az').textContent = d.motion.az.toFixed(2);
+    document.getElementById('mvTag').textContent = d.motion.moving ? 'em movimento' : 'parado';
+  } else {
+    document.getElementById('mag').textContent = '--';
+    mvBox.className = 'value idle';
+    document.getElementById('ax').textContent = '--';
+    document.getElementById('ay').textContent = '--';
+    document.getElementById('az').textContent = '--';
+    document.getElementById('mvTag').textContent = 'offline';
+  }
+
+  /* --- status --- */
+  stateDot(document.getElementById('dMpu'), d.sensors.mpu6050);
+  document.getElementById('dEsp').className = 'dot on';
+  document.getElementById('sMpu').textContent =
+    d.sensors.mpu6050 === 'ok' ? 'ONLINE' : d.sensors.mpu6050 === 'error' ? 'ERRO' : 'AUSENTE';
+  document.getElementById('sEsp').textContent = 'ONLINE';
+
+  var msg = '';
+  if (d.sensors.mpu6050 !== 'ok'){
+    msg = 'Acelerometro ' + (d.sensors.mpu6050 === 'error' ? 'com erro' : 'nao detectado') +
+          ' — sem queda nem tremor. O botao de ajuda continua funcionando.';
+  }
+  if (d.mode === 'config'){
+    msg = (msg ? msg + ' · ' : '') + 'Configuracao aberta na pulseira (rede ' + d.device_name + ' no ar).';
+  }
+  setBanner(msg);
+
+  /* --- alertas, postura e som --- */
+  renderAlerts(d);
+  renderPosture(d);
+  soundForAlerts(d);
+
+  /* O botao do buzzer so aparece quando ha buzzer: um botao que nunca faz
+     nada e pior do que botao nenhum. */
+  el('beepBtn').style.display = 'none';
+
+  /* --- diagnostico --- */
+  document.getElementById('ipPill').textContent = d.network.ip;
+  document.getElementById('kNet').textContent = d.network.mode + ' · ' + d.network.ssid;
+  var up = d.uptime_s;
+  document.getElementById('kUp').textContent =
+    Math.floor(up/3600) + 'h ' + Math.floor((up%3600)/60) + 'm ' + (up%60) + 's';
+  document.getElementById('kHeap').textContent = (d.free_heap/1024).toFixed(1) + ' KB';
+  document.getElementById('kSamples').textContent = d.samples;
+  document.getElementById('kMode').textContent =
+    d.mode === 'normal' ? 'uso normal' : d.mode === 'config' ? 'configuracao aberta' : 'primeira configuracao';
+  document.getElementById('kPanics').textContent = d.panic.count;
+  renderNet(d);
+  document.getElementById('kTemp').textContent = mpuOk ? d.motion.temperature_c.toFixed(1) + ' °C' : '--';
+  document.getElementById('kGyro').textContent = mpuOk
+    ? d.motion.gx.toFixed(1) + ' / ' + d.motion.gy.toFixed(1) + ' / ' + d.motion.gz.toFixed(1) + ' °/s'
+    : '--';
+
+  /* --- series dos graficos (2 Hz) --- */
+  var now = Date.now();
+  if (now - lastPlot >= 500){
+    lastPlot = now;
+    if (mpuOk){
+      sAx.push(d.motion.ax); sAy.push(d.motion.ay); sAz.push(d.motion.az);
+      sEn.push(d.movement.energy);
+    } else { sAx.push(null); sAy.push(null); sAz.push(null); sEn.push(null); }
+    drawAll();
+  }
+}
+
+/* ---------- transporte: Web Bluetooth (Nordic UART) ---------- */
+var NUS_SVC = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+var NUS_RX  = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';   /* app -> pulseira (write)  */
+var NUS_TX  = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';   /* pulseira -> app (notify) */
+
+var bleDev = null, bleRx = null, bleBuf = '', bleDec = new TextDecoder(), bleEnc = new TextEncoder();
+var bleBusy = false, bleQueue = Promise.resolve();
+
+function bleSupported(){ return !!(navigator.bluetooth && navigator.bluetooth.requestDevice); }
+
+/* Fluxo e notificacao chegam em pedacos do tamanho da MTU: remonta ate a quebra de linha. */
+function bleOnData(ev){
+  bleBuf += bleDec.decode(ev.target.value, { stream: true });
+  var i;
+  while ((i = bleBuf.indexOf('\n')) >= 0){
+    var line = bleBuf.slice(0, i).trim();
+    bleBuf = bleBuf.slice(i + 1);
+    if (line.charAt(0) === '{'){
+      try { render(JSON.parse(line)); } catch(e){}
+    } else if (line){
+      testMsg(line);   /* banner e respostas de comando, em texto puro */
+    }
+  }
+}
+
+function bleSend(cmd){
+  /* writeValue nao pode ser concorrente: enfileira. */
+  bleQueue = bleQueue.then(function(){
+    if (!bleRx) throw new Error('desconectado');
+    return bleRx.writeValueWithoutResponse(bleEnc.encode(cmd + '\n'));
+  });
+  return bleQueue;
+}
+
+function bleOnDisconnect(){
+  connected = false; bleRx = null; bleBusy = false;
+  setLink('err', 'Desconectado');
+  el('bleBtn').textContent = 'Conectar';
+  el('bleBtn').disabled = false;
+}
+
+async function bleConnect(){
+  if (!bleSupported()){
+    setBanner('Este navegador nao tem Web Bluetooth. No iPhone, abra esta pagina no app Bluefy.');
+    return;
+  }
+  if (bleBusy) return;
+  bleBusy = true;
+  el('bleBtn').disabled = true;
+  setBanner('');
+  try {
+    if (!bleDev){
+      bleDev = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [NUS_SVC] }],
+        optionalServices: [NUS_SVC]
+      });
+      bleDev.addEventListener('gattserverdisconnected', bleOnDisconnect);
+    }
+    setLink('', 'Conectando...');
+    var server = await bleDev.gatt.connect();
+    var svc    = await server.getPrimaryService(NUS_SVC);
+    bleRx      = await svc.getCharacteristic(NUS_RX);
+    var tx     = await svc.getCharacteristic(NUS_TX);
+    tx.addEventListener('characteristicvaluechanged', bleOnData);
+    bleBuf = '';
+    await tx.startNotifications();
+    connected = true;
+    setLink('on', 'Connected');
+    el('bleBtn').textContent = 'Desconectar';
+    bleSend('json').then(function(){ return bleSend('status'); }).catch(function(){});
+  } catch(e){
+    if (e && e.name === 'NotFoundError'){
+      setLink('', 'Nenhum dispositivo escolhido');   /* usuario cancelou */
+    } else {
+      setLink('err', 'Falha ao conectar');
+      setBanner('Nao foi possivel conectar: ' + (e && e.message ? e.message : e));
+    }
+    bleDev = null; bleRx = null;
+    el('bleBtn').textContent = 'Conectar';
+  }
+  bleBusy = false;
+  el('bleBtn').disabled = false;
+}
+
+function bleToggle(){
+  if (connected && bleDev && bleDev.gatt.connected) bleDev.gatt.disconnect();
+  else bleConnect();
+}
+
+/* Idade da ultima leitura: mostra quando o fluxo parou mesmo com socket aberto. */
+setInterval(function(){
+  var el = document.getElementById('agePill');
+  if (!lastMsg){ el.textContent = 'sem leitura'; return; }
+  var s = Math.round((Date.now() - lastMsg) / 1000);
+  el.textContent = s < 2 ? 'agora' : 'ha ' + s + ' s';
+  if (connected && s > 5) setLink('err', 'Sem dados');
+  else if (connected) setLink('on', 'Connected');
+}, 1000);
+
+/* ---------- comandos: so os que o servico BLE conhece ---------- */
+function el(id){ return document.getElementById(id); }
+
+/*
+ * Mesma assinatura do painel Wi-Fi para o resto do codigo nao mudar, mas aqui
+ * so existe "reconhecer alertas". Simulacoes e buzzer sao rotas HTTP do
+ * firmware, sem equivalente no servico BLE.
+ */
+function netReq(method, url, body, done){
+  if (url === '/api/alerts/ack' && connected){
+    bleSend('ack').then(function(){ done(200, { ok: true }); })
+                  .catch(function(){ done(0, null); });
+    return;
+  }
+  done(501, { ok: false, error: 'indisponivel por BLE' });
+}
+
+/* ---------- paciente, pedido de ajuda e historico ---------- */
+
+function renderPatient(d){
+  var p = d.patient || {};
+  el('ptName').textContent = p.name || 'Paciente nao cadastrado';
+  el('ptAge').textContent = (p.age !== null && p.age !== undefined) ? p.age + ' anos' : '';
+  el('ptRoom').textContent = p.room ? 'Leito ' + p.room : '';
+  el('ptContact').textContent = p.contact || '';
+  el('ptTag').textContent = 'pulseira ' + d.device_id;
+}
+
+function renderPanic(d){
+  var pn = d.panic || { active: false, count: 0 };
+  var card = el('panicCard');
+  if (pn.active){
+    card.className = 'card panic on';
+    el('pnBox').className = 'value';
+    el('pnState').textContent = 'AJUDA';
+    el('pnSince').textContent = ageText(pn.since_ms, d.timestamp_ms);
+    el('pnSub').textContent = 'O paciente apertou o botao. Reconheca o alerta depois de atender.';
+    el('pnTag').textContent = 'ativo';
+  } else {
+    card.className = 'card panic';
+    el('pnBox').className = 'value idle';
+    el('pnState').textContent = 'Nenhum';
+    el('pnSince').textContent = '';
+    el('pnSub').textContent = 'Tres toques no botao da pulseira pedem ajuda.';
+    el('pnTag').textContent = pn.count ? pn.count + ' desde que ligou' : '';
+  }
+}
+
+/*
+ * O firmware manda os ultimos eventos em todo envio; o painel junta pelo
+ * numero de sequencia. Assim o historico sobrevive a reconexoes e a envios
+ * perdidos sem nada repetido.
+ */
+var EVENT_KEEP = 60;
+var events = [];
+var lastSeq = 0;
+var bootUptime = null;
+
+var EVENT_TITLE = {
+  panic: 'Pedido de ajuda', fall: 'Queda', tremor: 'Tremor',
+  odd_motion: 'Movimento atipico', config: 'Configuracao', ack: 'Reconhecido'
+};
+
+function renderEvents(d){
+  var list = d.events || [];
+  /* Uptime menor que o anterior = a pulseira reiniciou e recomecou a contar. */
+  if (bootUptime !== null && d.uptime_s < bootUptime){ events = []; lastSeq = 0; }
+  bootUptime = d.uptime_s;
+
+  var changed = false;
+  for (var i = 0; i < list.length; i++){
+    if (list[i].seq > lastSeq){
+      events.unshift({ seq: list[i].seq, id: list[i].id, text: list[i].text,
+                       at: Date.now() - (d.timestamp_ms - list[i].t_ms) });
+      lastSeq = list[i].seq;
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  if (events.length > EVENT_KEEP) events.length = EVENT_KEEP;
+
+  var box = el('evList');
+  while (box.firstChild) box.removeChild(box.firstChild);
+  for (var k = 0; k < events.length; k++){
+    var e = events[k];
+    var li = document.createElement('li');
+    if (e.id === 'panic' || e.id === 'fall') li.className = 'crit';
+    var t = document.createElement('time');
+    var dt = new Date(e.at);
+    t.textContent = ('0' + dt.getHours()).slice(-2) + ':' + ('0' + dt.getMinutes()).slice(-2) +
+                    ':' + ('0' + dt.getSeconds()).slice(-2);
+    var body = document.createElement('span');
+    var b = document.createElement('b');
+    b.textContent = EVENT_TITLE[e.id] || e.id;
+    body.appendChild(b);
+    body.appendChild(document.createTextNode(e.text));
+    li.appendChild(t);
+    li.appendChild(body);
+    box.appendChild(li);
+  }
+  el('evEmpty').style.display = events.length ? 'none' : '';
+  el('evTag').textContent = events.length + (events.length === 1 ? ' evento' : ' eventos');
+}
+
+function renderNet(d){
+  var n = d.network || {};
+  el('nLink').textContent = n.link === 'ble' ? 'Bluetooth' : n.link === 'both' ? 'Wi-Fi e Bluetooth' : 'Wi-Fi';
+  el('nSsid').textContent = n.ssid || '--';
+  el('nAddr').textContent = n.ip ? ('http://' + n.ip) : '--';
+  el('nAp').textContent = d.device_name || 'VitalWatch';
+  el('netTag').textContent = n.mode || '--';
+}
+
+
+/* ---------- alertas, postura e teste ---------- */
+
+var ALERT_ICON = { critical: '!', warn: '!', info: 'i' };
+
+function ageText(sinceMs, nowMs){
+  var s = Math.max(0, Math.round((nowMs - sinceMs) / 1000));
+  if (s < 60) return 'ha ' + s + ' s';
+  return 'ha ' + Math.floor(s / 60) + ' min';
+}
+
+function renderAlerts(d){
+  var list  = d.alerts || [];
+  var box   = el('alList');
+  var empty = el('alEmpty');
+
+  while (box.firstChild) box.removeChild(box.firstChild);
+
+  if (!list.length){
+    empty.style.display = '';
+    el('alTag').textContent = 'nenhum';
+    return;
+  }
+  empty.style.display = 'none';
+  el('alTag').textContent = list.length + (list.length > 1 ? ' ativos' : ' ativo');
+
+  if (!soundReady()){
+    /* O navegador bloqueia audio ate o primeiro clique. Sem esta linha, a
+       pagina simplesmente nao apita e ninguem descobre por que. */
+    var hint = document.createElement('div');
+    hint.className = 'alerts-empty';
+    hint.textContent = 'Som desligado -- clique no icone de som no topo para ouvir os alertas.';
+    box.appendChild(hint);
+  }
+
+  for (var i = 0; i < list.length; i++){
+    var a = list[i];
+    var row = document.createElement('div');
+    row.className = 'alert' + (a.level === 'critical' ? ' crit' : a.level === 'warn' ? ' warn' : '');
+
+    var ico = document.createElement('span');
+    ico.className = 'ico';
+    ico.textContent = ALERT_ICON[a.level] || 'i';
+
+    var body = document.createElement('div');
+    var title = document.createElement('b');
+    title.textContent = a.title;
+    var detail = document.createElement('span');
+    /* "active:false" = a condicao ja normalizou, mas o alerta segue na tela
+       pelo tempo de retencao. Dizer isso evita agir sobre algo que passou. */
+    detail.textContent = a.detail + (a.active ? '' : '  (normalizado)');
+    body.appendChild(title);
+    body.appendChild(detail);
+
+    var age = document.createElement('span');
+    age.className = 'age';
+    age.textContent = ageText(a.since_ms, d.timestamp_ms);
+
+    row.appendChild(ico);
+    row.appendChild(body);
+    row.appendChild(age);
+    box.appendChild(row);
+  }
+}
+
+function renderPosture(d){
+  var p = d.posture || { id: 'unknown', label: '--', inclination: 0, stable: false };
+  var f = d.fall || { detected: false, simulated: false, count: 0 };
+
+  el('poLabel').textContent = p.label;
+  el('poAngle').textContent = d.sensors.mpu6050 === 'ok' ? (p.inclination + ' graus') : '';
+  el('poTag').textContent = d.sensors.mpu6050 !== 'ok' ? 'offline' : (p.stable ? 'estavel' : 'instavel');
+
+  var fallDot = el('dFall');
+  fallDot.className = 'dot' + (f.detected ? ' err' : ' on');
+  el('sFall').textContent = f.detected
+    ? (f.simulated ? 'SIMULADA (teste)' : 'DETECTADA')
+    : (f.count > 0 ? 'nenhuma agora (' + f.count + ' no total)' : 'nenhuma');
+
+  el('dMove').className = 'dot' + (d.motion.moving ? ' warn' : ' on');
+  el('sMove').textContent = d.motion.moving ? 'em movimento' : 'parado';
+
+  var mv = d.movement || {};
+  el('dTremor').className = 'dot' + (mv.tremor ? ' err' : ' on');
+  el('sTremor').textContent = mv.tremor
+    ? (mv.tremor_freq.toFixed(1) + ' Hz ha ' + mv.tremor_s + ' s')
+    : 'nao detectado';
+
+  el('dOdd').className = 'dot' + (mv.odd ? ' warn' : ' on');
+  el('sOdd').textContent = mv.odd
+    ? ('atipico (' + mv.odd_score.toFixed(1) + 'x o habitual)')
+    : (mv.label || '--');
+}
+
+function testMsg(text, cls){
+  var box = el('tMsg');
+  box.textContent = text || '';
+  box.className = 'netmsg' + (cls ? ' ' + cls : '');
+}
+
+function simulatePanic(){
+  testMsg('Simulando pedido de ajuda...');
+  netReq('POST', '/api/test/panic', '', function(status, d){
+    if (status !== 200 || !d || !d.ok){
+      testMsg('Nao foi possivel simular.', 'err');
+      return;
+    }
+    testMsg('Pedido de ajuda simulado: fica ate ser reconhecido.', 'ok');
+  });
+}
+
+function simulateFall(){
+  testMsg('Simulando queda...');
+  netReq('POST', '/api/test/fall', '', function(status, d){
+    if (status !== 200 || !d || !d.ok){
+      testMsg('Nao foi possivel simular.', 'err');
+      return;
+    }
+    testMsg('Queda simulada: o alerta fica ate ser reconhecido.', 'ok');
+  });
+}
+
+function ackAlerts(){
+  netReq('POST', '/api/alerts/ack', '', function(status, d){
+    if (status !== 200 || !d || !d.ok){
+      testMsg('Nao foi possivel reconhecer os alertas.', 'err');
+      return;
+    }
+    testMsg('Alertas reconhecidos.', 'ok');
+  });
+}
+
+el('panicBtn').onclick = simulatePanic;
+el('fallBtn').onclick = simulateFall;
+el('ackBtn').onclick  = ackAlerts;
+
+
+/* ---------- alarme sonoro no navegador ---------- */
+/*
+ * Escalada em quatro dimensoes ao mesmo tempo -- altura, numero de bipes,
+ * volume e intervalo de repeticao -- porque mexer so no volume nao distingue
+ * nada em ambiente barulhento, e mexer so no tom nao transmite urgencia.
+ *
+ * O navegador so deixa tocar audio depois de um clique do usuario (politica de
+ * autoplay), entao existe o botao de som no cabecalho: sem ele, a pagina
+ * ficaria muda sem explicar por que.
+ */
+var SOUND_PATTERNS = {
+  /* nivel        tomA  tomB  bipes  dur   intervalo  volume  repeticao */
+  info:      { a: 660,  b: 0,    n: 1, dur: 0.06, gap: 0,    vol: 0.15, repeat: 0     },
+  warn:      { a: 880,  b: 0,    n: 2, dur: 0.08, gap: 0.09, vol: 0.25, repeat: 10000 },
+  critical:  { a: 1400, b: 0,    n: 3, dur: 0.10, gap: 0.09, vol: 0.45, repeat: 3000  },
+  emergency: { a: 1200, b: 1600, n: 4, dur: 0.12, gap: 0.07, vol: 0.70, repeat: 1500  }
+};
+
+var audioCtx   = null;
+var soundOn    = true;
+try { soundOn = (localStorage.getItem('vw_sound') !== 'off'); } catch(e){}
+var lastAlerts = {};      /* id -> nivel ja anunciado */
+var lastPlayMs = 0;
+var lastLevel  = '';
+
+function soundReady(){
+  return soundOn && audioCtx && audioCtx.state === 'running';
+}
+
+function updateSoundButton(){
+  var b = el('soundBtn');
+  if (!b) return;
+  if (!soundOn){
+    b.textContent = '🔇';
+    b.title = 'Som desligado -- clique para ligar';
+  } else if (!audioCtx || audioCtx.state !== 'running'){
+    b.textContent = '🔈';
+    b.title = 'Clique para liberar o som neste navegador';
+  } else {
+    b.textContent = '🔊';
+    b.title = 'Som ligado -- clique para desligar';
+  }
+}
+
+function toggleSound(){
+  if (soundOn && audioCtx && audioCtx.state === 'running'){
+    soundOn = false;
+    try { localStorage.setItem('vw_sound', 'off'); } catch(e){}
+    updateSoundButton();
+    return;
+  }
+
+  soundOn = true;
+  try { localStorage.setItem('vw_sound', 'on'); } catch(e){}
+
+  try {
+    if (!audioCtx){
+      var Ctor = window.AudioContext || window.webkitAudioContext;
+      if (!Ctor){ updateSoundButton(); return; }
+      audioCtx = new Ctor();
+    }
+    /* resume() so vale dentro do gesto do usuario -- por isso este caminho
+       existe apenas aqui, no clique. */
+    if (audioCtx.state !== 'running' && audioCtx.resume) audioCtx.resume();
+  } catch(e){ audioCtx = null; }
+
+  playPattern('info');
+  setTimeout(updateSoundButton, 200);
+}
+
+function playPattern(levelId){
+  if (!soundReady()) return;
+
+  var p = SOUND_PATTERNS[levelId];
+  if (!p) return;
+
+  var t = audioCtx.currentTime + 0.02;
+
+  for (var i = 0; i < p.n; i++){
+    var freq = (p.b && (i % 2) === 1) ? p.b : p.a;
+    var osc  = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+
+    osc.type = 'square';          /* mais penetrante que senoide */
+    osc.frequency.value = freq;
+
+    /* Envelope curto nas bordas: sem ele, cada bipe estala. */
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(p.vol, t + 0.012);
+    gain.gain.setValueAtTime(p.vol, t + p.dur - 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + p.dur);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + p.dur + 0.01);
+
+    t += p.dur + p.gap;
+  }
+}
+
+/*
+ * Decide o que tocar a cada atualizacao.
+ *
+ * Regra que evita a fadiga de alarme: so alerta ATIVO faz barulho. O que ja
+ * normalizou continua na tela pelo tempo de retencao -- para ser lido --, mas
+ * continuar apitando depois que o problema passou e o caminho mais curto para
+ * o usuario desligar o som e perder o proximo.
+ */
+function soundForAlerts(d){
+  var list = d.alerts || [];
+  var now  = Date.now();
+
+  var worst = '';
+  var seen  = {};
+  var isNew = false;
+
+  for (var i = 0; i < list.length; i++){
+    var a = list[i];
+    if (!a.active) continue;
+
+    var level = (a.id === 'fall' || a.id === 'panic') ? 'emergency' : a.level;
+    seen[a.id] = level;
+
+    if (lastAlerts[a.id] !== level) isNew = true;
+
+    if (level === 'emergency') worst = 'emergency';
+    else if (level === 'critical' && worst !== 'emergency') worst = 'critical';
+    else if (level === 'warn' && !worst) worst = 'warn';
+  }
+  lastAlerts = seen;
+
+  if (!worst){
+    lastLevel = '';
+    return;
+  }
+
+  var p = SOUND_PATTERNS[worst];
+  var escalated = (worst !== lastLevel) &&
+                  !(lastLevel === 'emergency') &&
+                  !(lastLevel === 'critical' && worst === 'warn');
+  var due = p.repeat > 0 && (now - lastPlayMs) >= p.repeat;
+
+  if (isNew || escalated || due){
+    playPattern(worst);
+    lastPlayMs = now;
+    lastLevel  = worst;
+  }
+}
+
+function testBeep(){
+  netReq('POST', '/api/test/beep', 'level=3', function(status, d){
+    if (status !== 200 || !d || !d.ok){
+      testMsg('Buzzer: ' + ((d && d.error) ? d.error : 'sem resposta'), 'err');
+      return;
+    }
+    testMsg('Buzzer acionado no nivel ' + d.level + '.', 'ok');
+  });
+}
+
+el('soundBtn').onclick = toggleSound;
+el('beepBtn').onclick  = testBeep;
+updateSoundButton();
+
+
+drawAll();
+setLink('', 'Toque em Conectar');
+</script>
+</body>
+</html>
