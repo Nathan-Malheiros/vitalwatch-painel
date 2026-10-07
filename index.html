@@ -1101,21 +1101,38 @@ function ntfyConfig(){
   }
 }
 
-/* Um aviso por alerta novo (id + inicio). Reconectar nao repete os ja enviados. */
+/*
+ * Alerta novo (id + inicio) = 3 avisos em 15 s: agora, +7 s e +14 s. As repeticoes
+ * so saem enquanto o alerta continuar ativo: reconhecer ou normalizar cancela o
+ * resto. Reconectar nao dispara de novo os alertas que ja foram avisados.
+ */
+var NTFY_REPEAT_MS = [0, 7000, 14000];
+var ntfyLive = {};   /* chave -> ainda ativo na ultima leitura */
+
+function ntfySendAlert(a, n, who, room){
+  if (n > 0 && !ntfyLive[a.id + '|' + a.since_ms]) return;   /* encerrado: nao repete */
+  var crit = a.level === 'critical';
+  ntfyPost(a.title + ' - ' + who + room + ' (' + (n + 1) + '/3)',
+           a.detail ? a.detail : a.title,
+           crit ? 5 : 3,
+           [crit ? 'rotating_light' : 'warning']);
+}
+
 function ntfyCheck(d){
   if (!ntfyTopic || !d.alerts) return;
   var who = (d.patient && d.patient.name) ? d.patient.name : (d.device_name || 'VitalWatch');
   var room = (d.patient && d.patient.room) ? ' (quarto ' + d.patient.room + ')' : '';
+
+  for (var k in ntfyLive) ntfyLive[k] = false;
   d.alerts.forEach(function(a){
     if (!a.active) return;
     var key = a.id + '|' + a.since_ms;
+    ntfyLive[key] = true;
     if (ntfySent[key]) return;
     ntfySent[key] = true;
-    var crit = a.level === 'critical';
-    ntfyPost(a.title + ' - ' + who + room,
-             a.detail ? a.detail : a.title,
-             crit ? 5 : 3,
-             [crit ? 'rotating_light' : 'warning']);
+    NTFY_REPEAT_MS.forEach(function(ms, n){
+      setTimeout(function(){ ntfySendAlert(a, n, who, room); }, ms);
+    });
   });
 }
 
