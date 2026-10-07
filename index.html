@@ -168,6 +168,7 @@ button.ghost.wide{width:auto;padding:0 12px;height:34px;font-size:12px}
       <span id="fw">conectando a pulseira</span>
     </div>
   </div>
+  <button class="ghost wide" id="ntfyBtn" style="width:auto;padding:0 14px">Avisos</button>
   <button class="ghost wide" id="bleBtn" onclick="bleToggle()" style="width:auto;padding:0 14px">Conectar</button>
   <div class="pill"><span class="dot" id="linkDot"></span><span id="linkText">Conectando...</span></div>
   <div class="pill meta" id="ipPill">--</div>
@@ -1053,6 +1054,86 @@ el('soundBtn').onclick = toggleSound;
 el('beepBtn').onclick  = testBeep;
 updateSoundButton();
 
+
+/* ---------- avisos no celular (ntfy) + tela sempre ligada ---------- */
+/*
+ * O topico NAO fica no codigo: esta pagina e publica, e quem soubesse o topico
+ * leria os avisos (que levam o nome do paciente). Ele e gerado ao acaso neste
+ * aparelho e so existe no localStorage dele. Sem confirmar, nada e enviado.
+ */
+var NTFY_URL = 'https://ntfy.sh/';
+var ntfyTopic = '', ntfySent = {};
+try { ntfyTopic = localStorage.getItem('vw_ntfy_topic') || ''; } catch(e){}
+
+function ntfyRandomTopic(){
+  var a = new Uint8Array(12), s = '';
+  crypto.getRandomValues(a);
+  for (var i = 0; i < a.length; i++) s += ('0' + a[i].toString(16)).slice(-2);
+  return 'vitalwatch-' + s;
+}
+
+function ntfyUpdateBtn(){
+  el('ntfyBtn').textContent = ntfyTopic ? 'Avisos: ligados' : 'Avisos: desligados';
+}
+
+function ntfyPost(title, message, priority, tags){
+  if (!ntfyTopic) return Promise.resolve(false);
+  return fetch(NTFY_URL, {
+    method: 'POST',
+    body: JSON.stringify({ topic: ntfyTopic, title: title, message: message, priority: priority, tags: tags })
+  }).then(function(r){ return r.ok; }, function(){ return false; });
+}
+
+function ntfyConfig(){
+  var cur = ntfyTopic || ntfyRandomTopic();
+  var v = window.prompt(
+    'Topico do ntfy (assine ESTE texto no app ntfy do iPhone).\n' +
+    'Guarde em segredo: quem souber o topico le os avisos.\n' +
+    'Apague tudo e confirme para desligar os avisos.', cur);
+  if (v === null) return;
+  v = v.trim();
+  ntfyTopic = v;
+  try { localStorage.setItem('vw_ntfy_topic', v); } catch(e){}
+  ntfyUpdateBtn();
+  if (v){
+    ntfyPost('VitalWatch', 'Avisos ligados neste aparelho.', 3, ['white_check_mark'])
+      .then(function(ok){ testMsg(ok ? 'Aviso de teste enviado.' : 'Nao consegui enviar (sem internet?).', ok ? 'ok' : 'err'); });
+  }
+}
+
+/* Um aviso por alerta novo (id + inicio). Reconectar nao repete os ja enviados. */
+function ntfyCheck(d){
+  if (!ntfyTopic || !d.alerts) return;
+  var who = (d.patient && d.patient.name) ? d.patient.name : (d.device_name || 'VitalWatch');
+  var room = (d.patient && d.patient.room) ? ' (quarto ' + d.patient.room + ')' : '';
+  d.alerts.forEach(function(a){
+    if (!a.active) return;
+    var key = a.id + '|' + a.since_ms;
+    if (ntfySent[key]) return;
+    ntfySent[key] = true;
+    var crit = a.level === 'critical';
+    ntfyPost(a.title + ' - ' + who + room,
+             a.detail ? a.detail : a.title,
+             crit ? 5 : 3,
+             [crit ? 'rotating_light' : 'warning']);
+  });
+}
+
+var baseRender = render;
+render = function(d){ baseRender(d); ntfyCheck(d); };
+
+var wakeLock = null;
+function keepAwake(){
+  if (!('wakeLock' in navigator) || !connected) return;
+  navigator.wakeLock.request('screen').then(function(l){ wakeLock = l; }, function(){});
+}
+document.addEventListener('visibilitychange', function(){
+  if (document.visibilityState === 'visible') keepAwake();
+});
+setInterval(function(){ if (connected && (!wakeLock || wakeLock.released)) keepAwake(); }, 5000);
+
+el('ntfyBtn').onclick = ntfyConfig;
+ntfyUpdateBtn();
 
 drawAll();
 setLink('', 'Toque em Conectar');
